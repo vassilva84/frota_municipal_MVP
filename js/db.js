@@ -702,7 +702,7 @@ const DADOS_FATURAS = [
 /* ================================================================
    MOTOR DB — localStorage
    ================================================================ */
-const DB_VERSION = '4.0-mvp';
+const DB_VERSION = '4.1-mvp';
 
 const DB = {
   KEYS: {
@@ -712,19 +712,30 @@ const DB = {
 
   init() {
     const ver = localStorage.getItem(this.KEYS.ver);
-    if (ver !== DB_VERSION) {
-      /* Reset completo */
-      localStorage.setItem(this.KEYS.v,   JSON.stringify(DADOS_VEICULOS));
-      localStorage.setItem(this.KEYS.o,   JSON.stringify(DADOS_OBRAS));
-      localStorage.setItem(this.KEYS.al,  JSON.stringify(DADOS_ALERTAS));
-      localStorage.setItem(this.KEYS.itp, JSON.stringify(DADOS_ITP));
-      localStorage.setItem(this.KEYS.req, JSON.stringify(DADOS_REQUISICOES));
-      localStorage.setItem(this.KEYS.fat, JSON.stringify(DADOS_FATURAS));
-      localStorage.setItem(this.KEYS.ver, DB_VERSION);
-      console.log('[GOM DB] Dados inicializados — v' + DB_VERSION);
-    } else {
-      console.log('[GOM DB] Dados carregados do localStorage — v' + DB_VERSION);
+    const seeds = [
+      [this.KEYS.v, DADOS_VEICULOS], [this.KEYS.o, DADOS_OBRAS],
+      [this.KEYS.al, DADOS_ALERTAS], [this.KEYS.itp, DADOS_ITP],
+      [this.KEYS.req, DADOS_REQUISICOES], [this.KEYS.fat, DADOS_FATURAS]
+    ];
+    let inicializados = 0;
+    seeds.forEach(([key, dados]) => {
+      if (localStorage.getItem(key) === null) {
+        localStorage.setItem(key, JSON.stringify(dados));
+        inicializados++;
+      }
+    });
+    /* Uma atualização nunca apaga dados existentes. Apenas atualiza a versão. */
+    localStorage.setItem(this.KEYS.ver, DB_VERSION);
+    if (inicializados) console.log('[GOM DB] Estrutura inicializada sem substituir dados existentes — v' + DB_VERSION);
+    else if (ver !== DB_VERSION) console.log('[GOM DB] Dados preservados e versão atualizada — v' + DB_VERSION);
+    else console.log('[GOM DB] Dados carregados do localStorage — v' + DB_VERSION);
+  },
+
+  _id(prefixo) {
+    if (globalThis.crypto && typeof globalThis.crypto.randomUUID === 'function') {
+      return prefixo + globalThis.crypto.randomUUID();
     }
+    return prefixo + Date.now().toString(36) + Math.random().toString(36).slice(2,10);
   },
 
   _get(key, fallback) {
@@ -739,7 +750,7 @@ const DB = {
   saveVeiculos(l){ this._set(this.KEYS.v, l); },
   criarVeiculo(d) {
     const list=this.getVeiculos();
-    const novo={id:'v'+Date.now(),...d};
+    const novo={id:this._id('v-'),...d};
     list.push(novo); this.saveVeiculos(list); return novo;
   },
   actualizarVeiculo(id,campos) {
@@ -755,7 +766,7 @@ const DB = {
   saveObras(l){ this._set(this.KEYS.o, l); },
   criarObra(d) {
     const list=this.getObras();
-    const nova={id:'o'+Date.now(),...d};
+    const nova={id:this._id('o-'),...d};
     list.push(nova); this.saveObras(list); return nova;
   },
   actualizarObra(id,campos) {
@@ -765,8 +776,13 @@ const DB = {
   },
   eliminarObra(id) { this.saveObras(this.getObras().filter(o=>o.id!==id)); },
   proximoNumeroObra(ano) {
-    const n=this.getObras().filter(o=>o.numero_obra&&o.numero_obra.startsWith(`OBR-${ano}-`)).length;
-    return `OBR-${ano}-${String(n+1).padStart(3,'0')}`;
+    const prefixo=`OBR-${ano}-`;
+    const max=this.getObras().reduce((m,o)=>{
+      if(!o.numero_obra||!o.numero_obra.startsWith(prefixo)) return m;
+      const n=parseInt(o.numero_obra.slice(prefixo.length),10);
+      return Number.isFinite(n)?Math.max(m,n):m;
+    },0);
+    return `${prefixo}${String(max+1).padStart(3,'0')}`;
   },
   proximoNumObra(ano){ return this.proximoNumeroObra(ano); },
 
@@ -776,7 +792,7 @@ const DB = {
   saveAlertas(l)   { this._set(this.KEYS.al, l); },
   criarAlerta(d) {
     const list=this.getAlertas();
-    const novo={id:'al'+Date.now(),...d};
+    const novo={id:this._id('al-'),...d};
     list.push(novo); this.saveAlertas(list); return novo;
   },
   actualizarAlerta(id,campos) {
@@ -806,7 +822,7 @@ const DB = {
   saveReqs(l) { this._set(this.KEYS.req, l); },
   criarReq(d) {
     const list=this.getReqs();
-    const nova={id:'req'+Date.now(),...d};
+    const nova={id:this._id('req-'),...d};
     list.push(nova); this.saveReqs(list); return nova;
   },
   actualizarReq(id,campos) {
@@ -816,9 +832,13 @@ const DB = {
   },
   eliminarReq(id) { this.saveReqs(this.getReqs().filter(r=>r.id!==id)); },
   proximoNumeroReq() {
-    const ano=new Date().getFullYear();
-    const n=this.getReqs().filter(r=>r.numero_req&&r.numero_req.startsWith(`REQ-${ano}-`)).length;
-    return `REQ-${ano}-${String(n+1).padStart(3,'0')}`;
+    const ano=new Date().getFullYear(), prefixo=`REQ-${ano}-`;
+    const max=this.getReqs().reduce((m,r)=>{
+      if(!r.numero_req||!r.numero_req.startsWith(prefixo)) return m;
+      const n=parseInt(r.numero_req.slice(prefixo.length),10);
+      return Number.isFinite(n)?Math.max(m,n):m;
+    },0);
+    return `${prefixo}${String(max+1).padStart(3,'0')}`;
   },
   proximoNumReq(){ return this.proximoNumeroReq(); },
 
@@ -828,7 +848,7 @@ const DB = {
   saveFaturas(l) { this._set(this.KEYS.fat, l); },
   criarFatura(d) {
     const list=this.getFaturas();
-    const nova={id:'fat'+Date.now(),...d};
+    const nova={id:this._id('fat-'),...d};
     list.push(nova); this.saveFaturas(list); return nova;
   },
   actualizarFatura(id,campos) {
@@ -838,11 +858,36 @@ const DB = {
   },
   eliminarFatura(id) { this.saveFaturas(this.getFaturas().filter(f=>f.id!==id)); },
   proximoNumeroFatura() {
-    const ano=new Date().getFullYear();
-    const n=this.getFaturas().filter(f=>f.numero_fat&&f.numero_fat.startsWith(`FAT-${ano}-`)).length;
-    return `FAT-${ano}-${String(n+1).padStart(3,'0')}`;
+    const ano=new Date().getFullYear(), prefixo=`FAT-${ano}-`;
+    const max=this.getFaturas().reduce((m,f)=>{
+      if(!f.numero_fat||!f.numero_fat.startsWith(prefixo)) return m;
+      const n=parseInt(f.numero_fat.slice(prefixo.length),10);
+      return Number.isFinite(n)?Math.max(m,n):m;
+    },0);
+    return `${prefixo}${String(max+1).padStart(3,'0')}`;
   },
-  proximoNumFatura(){ return this.proximoNumeroFatura(); }
+  proximoNumFatura(){ return this.proximoNumeroFatura(); },
+
+  exportarTudo() {
+    return {
+      formato:'GOM_BACKUP', versao:DB_VERSION, exportado_em:new Date().toISOString(),
+      dados:{
+        veiculos:this.getVeiculos(), obras:this.getObras(), alertas:this.getAlertas(),
+        requisicoes:this.getReqs(), faturas:this.getFaturas()
+      }
+    };
+  },
+
+  importarTudo(backup) {
+    if(!backup || backup.formato!=='GOM_BACKUP' || !backup.dados) throw new Error('Cópia de segurança inválida.');
+    const d=backup.dados;
+    const campos=['veiculos','obras','alertas','requisicoes','faturas'];
+    campos.forEach(c=>{ if(!Array.isArray(d[c])) throw new Error('A cópia está incompleta: '+c); });
+    this.saveVeiculos(d.veiculos); this.saveObras(d.obras); this.saveAlertas(d.alertas);
+    this.saveReqs(d.requisicoes); this.saveFaturas(d.faturas);
+    localStorage.setItem(this.KEYS.ver, DB_VERSION);
+    return true;
+  }
 };
 
 /* ================================================================
@@ -869,12 +914,10 @@ function contarAlertasVeiculo(al) {
     ['seguro_valido_ate', 30],
     ['revisao_proxima',   30],
     ['oleo_proxima_data', 14],
-    ['pneus_proxima',     30],
     ['grua_proxima',      60],
     ['caixa_proxima',     60],
     ['tacografo_proxima', 30],
     ['extintor_validade', 30],
-    ['higienizacao_proxima', 14],
     ['licenciamento_validade', 30]
   ];
   for (const [campo, antec] of chaves) {

@@ -9,8 +9,10 @@
    ================================================================ */
 const TIPO_LABEL    = {ligeiro:'Ligeiro',pesado:'Pesado',maquina:'Máquina'};
 const ESTADO_OP_LABEL = {
-  operacional:'Operacional', manutencao:'Em Manutenção',
-  avaria:'Avaria', inativo:'Inativo'
+  operacional:'Operacional', em_reparacao:'Em reparação',
+  inoperacional_standby:'Inoperacional/Standby',
+  // Valores antigos mantidos apenas para leitura/migração de registos existentes.
+  manutencao:'Em Manutenção', avaria:'Em reparação', inativo:'Inoperacional/Standby'
 };
 const INT_COR = {
   'Manutenção preventiva':'badge-blue','Reparação':'badge-red',
@@ -23,9 +25,9 @@ const REQ_TIPO_LABEL = {material:'Material',servico:'Serviço externo',outro:'Ou
 const FAT_ESTADO_LABEL = {pendente:'Pendente',paga:'Paga',anulada:'Anulada'};
 const ALERTA_ANTEC = {
   itp_proxima:30, seguro_valido_ate:30, revisao_proxima:30,
-  oleo_proxima_data:14, pneus_proxima:30, grua_proxima:60,
+  oleo_proxima_data:14, grua_proxima:60,
   caixa_proxima:60, tacografo_proxima:30, extintor_validade:30,
-  higienizacao_proxima:14, licenciamento_validade:30
+  licenciamento_validade:30
 };
 
 /* ================================================================
@@ -115,6 +117,11 @@ function tiposArray(v) { if(!v)return []; if(Array.isArray(v))return v; return [
 function tiposStr(v)   { return tiposArray(v).join(', ')||'—'; }
 function uid()         { return Math.random().toString(36).slice(2)+Date.now().toString(36); }
 function localISO(d)   { const p=n=>String(n).padStart(2,'0'); return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`; }
+function dataValida(s) { return !!s && !Number.isNaN(new Date(s.length===10?s+'T00:00:00':s).getTime()); }
+function intervaloValido(entrada, saida) {
+  if(!entrada || !saida) return true;
+  return new Date(saida).getTime() >= new Date(entrada).getTime();
+}
 
 /* ================================================================
    MODAL
@@ -365,8 +372,8 @@ function renderDashboard() {
                 :abertas.slice(0,6).map(o=>`
                   <tr class="row-aberta">
                     <td><strong>${o.numero_obra}</strong></td>
-                    <td><div style="font-weight:600">${o.matricula}</div>
-                      <div style="font-size:11px;color:var(--text-medium)">${o.patrimonio||'—'} · <span class="badge badge-blue" style="font-size:10px;padding:1px 6px">${o.setor_snapshot||'—'}</span></div>
+                    <td><div style="font-weight:600">${esc(o.matricula)}</div>
+                      <div style="font-size:11px;color:var(--text-medium)">${esc(o.patrimonio||'—')} · <span class="badge badge-blue" style="font-size:10px;padding:1px 6px">${esc(o.setor_snapshot||'—')}</span></div>
                     </td>
                     <td>${badgeTipos(o.tipos_intervencao)}</td>
                     <td><span class="imob-live badge badge-orange" data-entrada="${o.data_entrada||''}">${calcDuracao(o.data_entrada,null)}</span></td>
@@ -418,7 +425,7 @@ function renderDashboard() {
             ${recentes.map(o=>`
               <tr>
                 <td><strong>${o.numero_obra}</strong></td>
-                <td><div>${o.matricula}</div><div style="font-size:11px;color:var(--text-light)">${fmtData(o.data_entrada)}</div></td>
+                <td><div>${esc(o.matricula)}</div><div style="font-size:11px;color:var(--text-light)">${fmtData(o.data_entrada)}</div></td>
                 <td>${badgeTipos(o.tipos_intervencao)}</td>
                 <td>${badgeEstado(o.estado)}</td>
                 <td>${o.estado==='fechada'?`<strong>${fmtEuro(o.custo_total)}</strong>`:'<span style="color:var(--text-light)">—</span>'}</td>
@@ -723,8 +730,8 @@ function rowsObras(lista) {
   return lista.map(o=>`
     <tr>
       <td><strong>${o.numero_obra}</strong></td>
-      <td>${o.matricula}</td>
-      <td><span class="badge badge-blue" style="font-size:11px">${o.setor_snapshot||'—'}</span></td>
+      <td>${esc(o.matricula)}</td>
+      <td><span class="badge badge-blue" style="font-size:11px">${esc(o.setor_snapshot||'—')}</span></td>
       <td>${badgeTipos(o.tipos_intervencao)}</td>
       <td style="white-space:nowrap">${fmtDataHora(o.data_entrada)}</td>
       <td><span class="${o.estado==='aberta'?'imob-live badge badge-orange':'badge badge-gray'}" data-entrada="${o.data_entrada||''}" data-saida="${o.data_saida||''}">
@@ -746,7 +753,7 @@ function filtrarObras() {
   const ti= document.getElementById('filtroInt')?.value||'';
   const se= document.getElementById('filtroSetor')?.value||'';
   const lista=(window._obras||[]).filter(o=>{
-    const match=!q||`${o.numero_obra} ${o.matricula} ${o.descricao_avaria}`.toLowerCase().includes(q);
+    const match=!q||`${o.numero_obra} ${esc(o.matricula)} ${o.descricao_avaria}`.toLowerCase().includes(q);
     const tipok=!ti||tiposArray(o.tipos_intervencao).includes(ti);
     const setork=!se||(o.setor_snapshot||'')===se;
     return match&&(!es||o.estado===es)&&tipok&&setork;
@@ -846,6 +853,8 @@ function actualizarObra(id) {
   const trab   =document.getElementById('ua_trabalhos')?.value||'';
   const pecas  =document.getElementById('ua_pecas')?.value||'';
   const serv   =document.getElementById('ua_servicos')?.value||'';
+  if(entrada&&!dataValida(entrada)){toastMsg('Data de entrada inválida','error');return;}
+  if(saida&&!intervaloValido(entrada,saida)){toastMsg('A saída não pode ser anterior à entrada','error');return;}
   const mao    =parseFloat(document.getElementById('ua_mao')?.value)||0;
   const servext=parseFloat(document.getElementById('ua_servext')?.value)||0;
   const mat    =parseFloat(document.getElementById('ua_mat')?.value)||0;
@@ -885,7 +894,8 @@ function modalFechar(id) {
 function fecharObra(id) {
   const saida =document.getElementById('fc_saida')?.value;
   const entrada=document.getElementById('fc_entrada')?.value||null;
-  if(!saida){toastMsg('Preencha a data/hora de saída','error');return;}
+  if(!saida||!dataValida(saida)){toastMsg('Preencha uma data/hora de saída válida','error');return;}
+  if(entrada&&!intervaloValido(entrada,saida)){toastMsg('A saída não pode ser anterior à entrada','error');return;}
   const mao =parseFloat(document.getElementById('fc_mao')?.value)||0;
   const serv=parseFloat(document.getElementById('fc_serv')?.value)||0;
   const mat =parseFloat(document.getElementById('fc_mat')?.value)||0;
@@ -932,9 +942,9 @@ function renderObraDetalhe(id) {
         </div>
         <div class="card-body">
           <div class="obra-detail-grid">
-            <div><div class="detail-label">Matrícula</div><div class="detail-value" style="font-size:20px;font-weight:800;color:var(--primary)">${o.matricula}</div></div>
-            <div><div class="detail-label">Nº de Património</div><div class="detail-value">${o.patrimonio||'—'}</div></div>
-            <div><div class="detail-label">Setor</div><div class="detail-value"><span class="badge badge-blue">${o.setor_snapshot||'—'}</span></div></div>
+            <div><div class="detail-label">Matrícula</div><div class="detail-value" style="font-size:20px;font-weight:800;color:var(--primary)">${esc(o.matricula)}</div></div>
+            <div><div class="detail-label">Nº de Património</div><div class="detail-value">${esc(o.patrimonio||'—')}</div></div>
+            <div><div class="detail-label">Setor</div><div class="detail-value"><span class="badge badge-blue">${esc(o.setor_snapshot||'—')}</span></div></div>
             <div><div class="detail-label">Estado</div><div class="detail-value">${badgeEstado(o.estado)}</div></div>
             <div><div class="detail-label">Entrada</div><div class="detail-value">${fmtDataHora(o.data_entrada)}</div></div>
             <div><div class="detail-label">Saída</div><div class="detail-value">${o.data_saida?fmtDataHora(o.data_saida):'<span style="color:var(--text-light)">— (em intervenção)</span>'}</div></div>
@@ -1032,12 +1042,10 @@ function renderVeiculoHistorico(id) {
             ${_rowAlertaSimples('Seguro',alerta.seguro_valido_ate,30,null)}
             ${_rowAlertaSimples('Revisão',alerta.revisao_proxima,30,alerta.revisao_ultima)}
             ${_rowAlertaSimples('Mudança de Óleo',alerta.oleo_proxima_data,14,alerta.oleo_ultima_data)}
-            ${_rowAlertaSimples('Pneus',alerta.pneus_proxima,30,alerta.pneus_ultima)}
             ${alerta.grua_proxima?_rowAlertaSimples('Certif. Grua',alerta.grua_proxima,60,alerta.grua_ultima):''}
             ${alerta.caixa_proxima?_rowAlertaSimples('Certif. Caixa',alerta.caixa_proxima,60,alerta.caixa_ultima):''}
             ${alerta.tacografo_proxima?_rowAlertaSimples('Tacógrafo',alerta.tacografo_proxima,30,alerta.tacografo_ultima):''}
             ${_rowAlertaSimples('Extintores',alerta.extintor_validade,30,null)}
-            ${_rowAlertaSimples('Higienização',alerta.higienizacao_proxima,14,alerta.higienizacao_ultima)}
             ${_rowAlertaSimples('Licenciamento',alerta.licenciamento_validade,30,null)}
           </div>
           ${alerta.observacoes?`<p style="margin-top:12px;font-size:12px;color:var(--text-medium)">${icon('info',12)} ${esc(alerta.observacoes)}</p>`:''}
@@ -1210,8 +1218,6 @@ function _htmlFormAlerta(al=null) {
     <div class="form-group"><label class="form-label">Próxima Revisão</label><input type="date" class="form-control" id="al_rev_prox" value="${al?.revisao_proxima||''}"></div>
     <div class="form-group"><label class="form-label">Última Mudança Óleo</label><input type="date" class="form-control" id="al_oleo_ult" value="${al?.oleo_ultima_data||''}"></div>
     <div class="form-group"><label class="form-label">Próx. Mudança Óleo</label><input type="date" class="form-control" id="al_oleo_prox" value="${al?.oleo_proxima_data||''}"></div>
-    <div class="form-group"><label class="form-label">Última Subst. Pneus</label><input type="date" class="form-control" id="al_pneus_ult" value="${al?.pneus_ultima||''}"></div>
-    <div class="form-group"><label class="form-label">Próx. Subst. Pneus</label><input type="date" class="form-control" id="al_pneus_prox" value="${al?.pneus_proxima||''}"></div>
     <div class="form-group"><label class="form-label">Certif. Grua (última)</label><input type="date" class="form-control" id="al_grua_ult" value="${al?.grua_ultima||''}"></div>
     <div class="form-group"><label class="form-label">Certif. Grua (próxima)</label><input type="date" class="form-control" id="al_grua_prox" value="${al?.grua_proxima||''}"></div>
     <div class="form-group"><label class="form-label">Certif. Caixa (última)</label><input type="date" class="form-control" id="al_caixa_ult" value="${al?.caixa_ultima||''}"></div>
@@ -1219,8 +1225,6 @@ function _htmlFormAlerta(al=null) {
     <div class="form-group"><label class="form-label">Tacógrafo (última)</label><input type="date" class="form-control" id="al_tac_ult" value="${al?.tacografo_ultima||''}"></div>
     <div class="form-group"><label class="form-label">Tacógrafo (próximo)</label><input type="date" class="form-control" id="al_tac_prox" value="${al?.tacografo_proxima||''}"></div>
     <div class="form-group"><label class="form-label">Extintores (validade)</label><input type="date" class="form-control" id="al_ext" value="${al?.extintor_validade||''}"></div>
-    <div class="form-group"><label class="form-label">Higienização (última)</label><input type="date" class="form-control" id="al_hig_ult" value="${al?.higienizacao_ultima||''}"></div>
-    <div class="form-group" style="grid-column:span 1"><label class="form-label">Higienização (próxima)</label><input type="date" class="form-control" id="al_hig_prox" value="${al?.higienizacao_proxima||''}"></div>
     <div class="form-group" style="grid-column:span 2"><label class="form-label">Observações</label>
       <textarea class="form-control" id="al_obs" rows="2">${esc(al?.observacoes||'')}</textarea></div>
   </form>`;
@@ -1232,12 +1236,10 @@ function _lerFormAlerta() {
     seguro_valido_ate:g('al_seguro'),licenciamento_validade:g('al_licenc'),
     revisao_ultima:g('al_rev_ult'),revisao_proxima:g('al_rev_prox'),
     oleo_ultima_data:g('al_oleo_ult'),oleo_proxima_data:g('al_oleo_prox'),
-    pneus_ultima:g('al_pneus_ult'),pneus_proxima:g('al_pneus_prox'),
     grua_ultima:g('al_grua_ult'),grua_proxima:g('al_grua_prox'),
     caixa_ultima:g('al_caixa_ult'),caixa_proxima:g('al_caixa_prox'),
     tacografo_ultima:g('al_tac_ult'),tacografo_proxima:g('al_tac_prox'),
     extintor_validade:g('al_ext'),
-    higienizacao_ultima:g('al_hig_ult'),higienizacao_proxima:g('al_hig_prox'),
     observacoes:g('al_obs')
   };
 }
@@ -1403,7 +1405,7 @@ function _htmlFormReq(r=null) {
       <div class="form-group"><label class="form-label">Obra Associada</label>
         <select class="form-control" id="req_obra">
           <option value="">— Opcional —</option>
-          ${obras.map(o=>`<option value="${o.id}" ${r?.obra_id===o.id?'selected':''}>${o.numero_obra} — ${o.matricula}</option>`).join('')}
+          ${obras.map(o=>`<option value="${o.id}" ${r?.obra_id===o.id?'selected':''}>${o.numero_obra} — ${esc(o.matricula)}</option>`).join('')}
         </select></div>
     </div>
     <div class="form-row form-row-2">
@@ -2110,12 +2112,10 @@ function _tabAlertas(alertas, veiculos) {
     {key:'seguro',       campo:'seguro_valido_ate',      lbl:'Seguro',                     antec:30},
     {key:'revisao',      campo:'revisao_proxima',        lbl:'Revisão Periódica',          antec:30},
     {key:'oleo',         campo:'oleo_proxima_data',      lbl:'Mudança de Óleo',            antec:14},
-    {key:'pneus',        campo:'pneus_proxima',          lbl:'Pneus',                      antec:30},
     {key:'grua',         campo:'grua_proxima',           lbl:'Certificação de Grua',       antec:60},
     {key:'caixa',        campo:'caixa_proxima',          lbl:'Certificação de Caixa',      antec:60},
     {key:'tacografo',    campo:'tacografo_proxima',      lbl:'Tacógrafo',                  antec:30},
     {key:'extintor',     campo:'extintor_validade',      lbl:'Extintores',                 antec:30},
-    {key:'higienizacao', campo:'higienizacao_proxima',   lbl:'Higienização',               antec:14},
     {key:'licenciamento',campo:'licenciamento_validade', lbl:'Licenciamento',              antec:30},
   ];
   const cont = {};
@@ -2513,7 +2513,6 @@ function _drawChartAlertasTipos(alertas) {
     {campo:'seguro_valido_ate',lbl:'Seguro',antec:30},
     {campo:'revisao_proxima',lbl:'Revisão',antec:30},
     {campo:'oleo_proxima_data',lbl:'Óleo',antec:14},
-    {campo:'pneus_proxima',lbl:'Pneus',antec:30},
     {campo:'grua_proxima',lbl:'Grua',antec:60},
     {campo:'tacografo_proxima',lbl:'Tacógrafo',antec:30},
     {campo:'extintor_validade',lbl:'Extintor',antec:30},
@@ -2654,12 +2653,10 @@ function exportarRelatorioExcel(tab) {
       {campo:'seguro_valido_ate',lbl:'Seguro',antec:30},
       {campo:'revisao_proxima',lbl:'Revisão',antec:30},
       {campo:'oleo_proxima_data',lbl:'Óleo',antec:14},
-      {campo:'pneus_proxima',lbl:'Pneus',antec:30},
       {campo:'grua_proxima',lbl:'Grua',antec:60},
       {campo:'caixa_proxima',lbl:'Caixa',antec:60},
       {campo:'tacografo_proxima',lbl:'Tacógrafo',antec:30},
       {campo:'extintor_validade',lbl:'Extintor',antec:30},
-      {campo:'higienizacao_proxima',lbl:'Higienização',antec:14},
       {campo:'licenciamento_validade',lbl:'Licenciamento',antec:30},
     ];
     /* Folha — Alertas por Viatura */
@@ -2872,9 +2869,9 @@ function exportarRelatorioPDF(tab) {
     const CAMPOS=[
       {campo:'itp_proxima',lbl:'ITP',antec:30},{campo:'seguro_valido_ate',lbl:'Seguro',antec:30},
       {campo:'revisao_proxima',lbl:'Revisão',antec:30},{campo:'oleo_proxima_data',lbl:'Óleo',antec:14},
-      {campo:'pneus_proxima',lbl:'Pneus',antec:30},{campo:'grua_proxima',lbl:'Grua',antec:60},
+      {campo:'grua_proxima',lbl:'Grua',antec:60},
       {campo:'caixa_proxima',lbl:'Caixa',antec:60},{campo:'tacografo_proxima',lbl:'Tacógrafo',antec:30},
-      {campo:'extintor_validade',lbl:'Extintor',antec:30},{campo:'higienizacao_proxima',lbl:'Higienização',antec:14},
+      {campo:'extintor_validade',lbl:'Extintor',antec:30},
       {campo:'licenciamento_validade',lbl:'Licenciamento',antec:30},
     ];
     const cont={};
@@ -3034,18 +3031,18 @@ function imprimirObra(id) {
         <div class="estado-box">${o.estado==='fechada'?'✓ CONCLUÍDA':'⚙ EM ABERTO'}</div></div>
     </div>
     <div class="ig">
-      <div class="ii"><div class="il">Matrícula</div><div class="iv">${o.matricula}</div></div>
-      <div class="ii"><div class="il">Nº de Património</div><div class="iv">${o.patrimonio||'—'}</div></div>
-      <div class="ii"><div class="il">Setor</div><div class="iv n">${o.setor_snapshot||'—'}</div></div>
+      <div class="ii"><div class="il">Matrícula</div><div class="iv">${esc(o.matricula)}</div></div>
+      <div class="ii"><div class="il">Nº de Património</div><div class="iv">${esc(o.patrimonio||'—')}</div></div>
+      <div class="ii"><div class="il">Setor</div><div class="iv n">${esc(o.setor_snapshot||'—')}</div></div>
       <div class="ii"><div class="il">Entrada</div><div class="iv n">${fmtDataHora(o.data_entrada)}</div></div>
       <div class="ii"><div class="il">Saída</div><div class="iv n">${fmtDataHora(o.data_saida)}</div></div>
       <div class="ii"><div class="il">Imobilização</div><div class="iv n">${calcDuracao(o.data_entrada,o.data_saida)}</div></div>
     </div>
-    <div class="sec"><div class="st">Tipos de Intervenção</div><div class="sb">${tiposStr(o.tipos_intervencao)}</div></div>
-    <div class="sec"><div class="st">Descrição da Avaria / Intervenção</div><div class="sb">${o.descricao_avaria||'Sem descrição'}</div></div>
-    <div class="sec"><div class="st">Trabalhos Realizados</div><div class="sb">${o.trabalhos_realizados||'Não preenchido'}</div></div>
-    <div class="sec"><div class="st">Peças e Materiais</div><div class="sb">${o.pecas_materiais||'Não preenchido'}</div></div>
-    <div class="sec"><div class="st">Serviços Externos</div><div class="sb">${o.servicos_externos||'Não aplicável'}</div></div>
+    <div class="sec"><div class="st">Tipos de Intervenção</div><div class="sb">${esc(tiposStr(o.tipos_intervencao))}</div></div>
+    <div class="sec"><div class="st">Descrição da Avaria / Intervenção</div><div class="sb">${esc(o.descricao_avaria||'Sem descrição')}</div></div>
+    <div class="sec"><div class="st">Trabalhos Realizados</div><div class="sb">${esc(o.trabalhos_realizados||'Não preenchido')}</div></div>
+    <div class="sec"><div class="st">Peças e Materiais</div><div class="sb">${esc(o.pecas_materiais||'Não preenchido')}</div></div>
+    <div class="sec"><div class="st">Serviços Externos</div><div class="sb">${esc(o.servicos_externos||'Não aplicável')}</div></div>
     <div class="sec"><div class="st">Resumo de Custos</div>
       <table class="ct">
         <tr><td>Mão de obra interna</td><td>${fmtEuro(mao)}</td></tr>

@@ -3,8 +3,9 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>GOM v3.0 — Gestão de Obras de Manutenção de Frota</title>
+  <title>GOM v3.1 — Gestão de Obras de Manutenção de Frota</title>
   <link rel="stylesheet" href="css/style.css" />
+  <link rel="stylesheet" href="css/gom-v4.css" />
   <style>
     #gomLoading {
       position:fixed;inset:0;z-index:9999;
@@ -28,7 +29,7 @@
 <body class="a-carregar">
 
 <!-- LOADING -->
-<div id="gomLoading" role="status" aria-label="A carregar GOM v3.0">
+<div id="gomLoading" role="status" aria-label="A carregar GOM v3.1">
   <div class="ll">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="38" height="38">
       <path d="M5 17H3v-7l2-5h14l2 5v7h-2"/>
@@ -37,7 +38,7 @@
     </svg>
     <div class="ll-text">
       <div class="org">Município · Serviço de Frotas</div>
-      <div class="sys">GOM v3.0</div>
+      <div class="sys">GOM v3.1</div>
     </div>
   </div>
   <div class="l-spin"></div>
@@ -85,7 +86,7 @@
               <line x1="5" y1="12" x2="19" y2="12"/>
             </svg>
           </span>
-          <span>Veículos</span>
+          <span>Frota</span>
         </a>
       </li>
       <li>
@@ -137,7 +138,12 @@
   </nav>
 
   <div class="sidebar-footer">
-    <span>GOM v3.0 · 2025 · MVP Demo</span>
+    <div class="sidebar-data-actions">
+      <button type="button" class="sidebar-mini-btn" onclick="exportarCopiaSeguranca()" title="Guardar uma cópia de todos os dados">Cópia de segurança</button>
+      <button type="button" class="sidebar-mini-btn" onclick="document.getElementById('importBackupInput').click()" title="Restaurar dados a partir de uma cópia">Restaurar</button>
+      <input id="importBackupInput" type="file" accept="application/json,.json" hidden onchange="importarCopiaSeguranca(this.files[0]);this.value=''">
+    </div>
+    <span>GOM v3.1 · Protótipo local</span>
   </div>
 </aside>
 
@@ -206,7 +212,12 @@
 <script src="js/db.js"></script>
 <!-- App principal -->
 <script src="js/app.js"></script>
-<!-- Arranque -->
+<!-- Arranque: regista os eventos; a inicialização ocorre em DOMContentLoaded -->
 <script src="js/fixes.js"></script>
+<!-- Extensões funcionais compatíveis com os dados da versão 3.1 -->
+<script src="js/gom-v4-data.js"></script>
+<script src="js/gom-v4-fleet.js"></script>
+<script src="js/gom-v4-works.js"></script>
+<script src="js/gom-v4-reports.js"></script>
 </body>
 </html>

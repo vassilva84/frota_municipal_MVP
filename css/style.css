@@ -1855,3 +1855,9 @@ tr.alerta-row-proximo:hover  { background: #fef3c7 !important; }
   .rel-alert-summary    { grid-template-columns: 1fr; }
   .frota-resumo-grid    { grid-template-columns: 1fr; }
 }
+
+
+/* Cópias de segurança no rodapé lateral */
+.sidebar-data-actions{display:grid;grid-template-columns:1fr 1fr;gap:6px;width:100%;margin-bottom:8px}
+.sidebar-mini-btn{border:1px solid rgba(255,255,255,.18);background:rgba(255,255,255,.06);color:rgba(255,255,255,.82);border-radius:6px;padding:7px 6px;font-size:10px;cursor:pointer;transition:.15s ease}
+.sidebar-mini-btn:hover,.sidebar-mini-btn:focus{background:rgba(255,255,255,.14);color:#fff;outline:none}
